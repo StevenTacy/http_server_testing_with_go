@@ -1,16 +1,20 @@
 package httpserver
 
 import (
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestRecordingWinsAndResult(t *testing.T) {
-	database, cleanDB := createTempFile(t, "")
+	database, cleanDB := createTempFile(t, `[]`)
 	defer cleanDB()
 
-	store := NewFileSystemPlayerStore(database)
+	store, err := NewFileSystemPlayerStore(database)
+	if err != nil {
+		log.Fatalf("problem creating system player store %v", err)
+	}
 	server := NewPlayerServer(store)
 
 	player := "stevie"

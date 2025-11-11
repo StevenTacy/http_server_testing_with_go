@@ -2,7 +2,10 @@ package httpserver
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"os"
+	"sort"
 )
 
 /**
@@ -11,13 +14,16 @@ import (
  *
  */
 type FileSystemPlayerStore struct {
-	Database io.Writer
+	Database *json.Encoder
 	League   League
 }
 
 type League []Player
 
 func (f *FileSystemPlayerStore) GetLeague() League {
+	sort.Slice(f.League, func(i, j int) bool {
+		return f.League[i].Wins > f.League[j].Wins
+	})
 	return f.League
 }
 
@@ -39,7 +45,7 @@ func (f *FileSystemPlayerStore) RecordWin(name string) {
 		f.League = append(f.League, Player{name, 1})
 	}
 
-	json.NewEncoder(f.Database).Encode(f.League)
+	f.Database.Encode(f.League)
 }
 
 func (l League) Find(name string) *Player {
@@ -53,11 +59,36 @@ func (l League) Find(name string) *Player {
 	return nil
 }
 
-func NewFileSystemPlayerStore(database io.ReadWriteSeeker) *FileSystemPlayerStore {
-	database.Seek(0, io.SeekStart)
-	league, _ := NewLeague(database)
-	return &FileSystemPlayerStore{
-		Database: &tape{database},
-		League:   league,
+func NewFileSystemPlayerStore(file *os.File) (*FileSystemPlayerStore, error) {
+
+	err := initialisePLayerDBFile(file)
+	if err != nil {
+		return nil, fmt.Errorf("problem initialise db file, %v", err)
 	}
+
+	league, err := NewLeague(file)
+	if err != nil {
+		return nil, fmt.Errorf("problem loading player from file %s, %v", file.Name(), err)
+	}
+
+	return &FileSystemPlayerStore{
+		Database: json.NewEncoder(&tape{file}),
+		League:   league,
+	}, nil
+}
+
+func initialisePLayerDBFile(file *os.File) error {
+	file.Seek(0, io.SeekStart)
+
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("problem getting info from file %s, %v", file.Name(), err)
+	}
+
+	if info.Size() == 0 {
+		file.Write([]byte("[]"))
+		file.Seek(0, io.SeekStart)
+	}
+
+	return nil
 }
