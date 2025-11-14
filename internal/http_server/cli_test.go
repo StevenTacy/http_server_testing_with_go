@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -12,38 +13,70 @@ var dummyStdIn = &bytes.Buffer{}
 var dummyStdOut = &bytes.Buffer{}
 
 func TestCli(t *testing.T) {
-	t.Run("record chris win from user input", func(t *testing.T) {
 
-		in := strings.NewReader("Chris wins\n")
-		playerStore := &StubPlayerStore{}
-		game := NewGame(dummySpyAlerter, playerStore)
-		cli := NewCLI(in, dummyStdOut, game)
+	t.Run("it prompts the user to enter the number of players and starts the game", func(t *testing.T) {
+		stdout := &bytes.Buffer{}
+		in := strings.NewReader("7\n")
+		game := &GameSpy{}
+		cli := NewCLI(in, stdout, game)
 		cli.PlayPoker()
-		AssertPlayerWin(t, playerStore, "Chris")
+
+		gotPrompt := stdout.String()
+		wantPrompt := PlayerPrompt
+
+		if gotPrompt != wantPrompt {
+			t.Errorf("got %q, want %q", gotPrompt, wantPrompt)
+		}
+
+		if game.StartedWith != 7 {
+			t.Errorf("wanted start called with 7 but got %d", game.StartedWith)
+		}
 	})
 
-	t.Run("record cleo win from user input", func(t *testing.T) {
-
-		in := strings.NewReader("Cleo wins\n")
-		playerStore := &StubPlayerStore{}
-		game := NewGame(dummySpyAlerter, playerStore)
+	t.Run("finish game with 'Chris' as winner", func(t *testing.T) {
+		in := strings.NewReader("1\nChris wins\n")
+		game := &GameSpy{}
 		cli := NewCLI(in, dummyStdOut, game)
 		cli.PlayPoker()
-		AssertPlayerWin(t, playerStore, "Cleo")
-	})
-	//
-	// t.Run("it schedules printing of blind values", func(t *testing.T) {
-	// 	in := strings.NewReader("Cleo wins\n")
-	// 	playerStore := &StubPlayerStore{}
-	// 	blindAlerter := &SpyBlindAlerter{}
-	//
-	// 	cli := NewCLI(playerStore, in, blindAlerter)
-	// 	cli.PlayPoker()
-	// 	if len(blindAlerter.alerts) != 1 {
-	// 		t.Fatal("expected a blind alert to be scheduled")
-	// 	}
-	// })
 
+		if game.FinishedWith != "Chris" {
+			t.Errorf("expected finish called with 'Chris' but got %q", game.FinishedWith)
+		}
+	})
+
+	t.Run("record 'Cleo' win from user input", func(t *testing.T) {
+		in := strings.NewReader("1\nCleo wins\n")
+		game := &GameSpy{}
+		cli := NewCLI(in, dummyStdOut, game)
+		cli.PlayPoker()
+
+		if game.FinishedWith != "Cleo" {
+			t.Errorf("expected finish called with 'Cleo' but got %q", game.FinishedWith)
+		}
+	})
+
+	t.Run("it prints an error when a non numeric value is entered and does not start the game", func(t *testing.T) {
+		stdout := &bytes.Buffer{}
+		in := strings.NewReader("Pies\n")
+		game := &GameSpy{}
+		cli := NewCLI(in, stdout, game)
+		cli.PlayPoker()
+
+		if game.StartCalled {
+			t.Errorf("game should not have started")
+		}
+
+		gotPrompt := stdout.String()
+		wantPrompt := PlayerPrompt + "ur so silly"
+		if gotPrompt != wantPrompt {
+			t.Errorf("got %q, want %q", gotPrompt, wantPrompt)
+		}
+	})
+}
+
+type failOnEndReader struct {
+	t   *testing.T
+	rdr io.Reader
 }
 
 func assertScheduledAlert(t testing.TB, got, want scheduleAlert) {

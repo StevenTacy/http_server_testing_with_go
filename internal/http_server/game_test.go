@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -64,14 +65,15 @@ func TestStart(t *testing.T) {
 	})
 }
 
-func checkSchedulingCases(cases []scheduleAlert, t testing.TB, alerter BlindAlerter) {
-	t.Helper()
+func checkSchedulingCases(cases []scheduleAlert, t *testing.T, alerter *SpyBlindAlerter) {
 	for i, want := range cases {
-		if len(alerter.alerts) <= i {
-			t.Fatalf("alert %d was not scheduled %v", i, blindAlerter.alerts)
-		}
+		t.Run(fmt.Sprint(want), func(t *testing.T) {
+			if len(alerter.alerts) <= i {
+				t.Fatalf("alert %d was not scheduled %v", i, alerter.alerts)
+			}
 
-		got := blindAlerter.alerts[i]
-		assertScheduledAlert(t, got, want)
+			got := alerter.alerts[i]
+			assertScheduledAlert(t, got, want)
+		})
 	}
 }

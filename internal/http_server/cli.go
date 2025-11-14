@@ -29,7 +29,11 @@ type scheduleAlert struct {
 func (c *CLI) PlayPoker() {
 	fmt.Fprint(c.out, PlayerPrompt)
 	input := c.readLine()
-	numberOfPlayers, _ := strconv.Atoi(strings.Trim(input, "\n"))
+	numberOfPlayers, err := strconv.Atoi(strings.Trim(input, "\n"))
+	if err != nil {
+		fmt.Fprint(c.out, "ur so silly")
+		return
+	}
 	c.game.Start(numberOfPlayers)
 	userInput := c.readLine()
 	winner := extractWinner(userInput)

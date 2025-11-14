@@ -12,6 +12,11 @@ type Game interface {
 	Finish(winner string)
 }
 
+type GameSpy struct {
+	StartedWith  int
+	FinishedWith string
+}
+
 func NewGame(alerter BlindAlerter, store PlayerStore) *TexasHoldem {
 	return &TexasHoldem{
 		alerter: alerter,
@@ -31,4 +36,12 @@ func (p *TexasHoldem) Start(numberOfPlayers int) {
 
 func (p *TexasHoldem) Finish(winner string) {
 	p.store.RecordWin(winner)
+}
+
+func (g *GameSpy) Start(numberOfPlayers int) {
+	g.StartedWith = numberOfPlayers
+}
+
+func (g *GameSpy) Finish(winner string) {
+	g.FinishedWith = winner
 }
