@@ -18,7 +18,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer closeFunc()
-	game := httpserver.NewGame(httpserver.BlindAlerterFunc(httpserver.StdOutAlerter), store)
+	game := httpserver.NewGame(httpserver.BlindAlerterFunc(httpserver.Alerter), store)
 	cli := httpserver.NewCLI(os.Stdin, os.Stdout, game)
 	cli.PlayPoker()
 }

@@ -6,7 +6,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
+)
+
+var (
+	dummyGame = &GameSpy{}
 )
 
 func TestGETPlayers(t *testing.T) {
@@ -20,7 +28,7 @@ func TestGETPlayers(t *testing.T) {
 		nil,
 	}
 
-	server := NewPlayerServer(&store)
+	server, _ := NewPlayerServer(&store, dummyGame)
 	t.Run("return Pepper's score", func(t *testing.T) {
 		request := newGetScoreRequest("Pepper")
 		response := httptest.NewRecorder()
@@ -48,6 +56,36 @@ func TestGETPlayers(t *testing.T) {
 	})
 }
 
+func TestGame(t *testing.T) {
+	t.Run("Get /game return 200", func(t *testing.T) {
+		server, _ := NewPlayerServer(&StubPlayerStore{}, dummyGame)
+		request := newGameRequest()
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+
+		AssertResponseStatusCode(t, response.Code, http.StatusOK)
+	})
+
+	t.Run("when get a msg from websocket, it declared a winner", func(t *testing.T) {
+		tenMs := 10 * time.Millisecond
+		wantBlindAlerter := "Blind is 100"
+		game := &GameSpy{}
+		winner := "Ruth"
+		server := httptest.NewServer(mustMakePlayerServer(t, dummyPlayerStore, game))
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws"
+		ws := mustDialWs(t, wsURL)
+
+		defer server.Close()
+		defer ws.Close()
+		writeWsMessage(t, ws, "3")
+		writeWsMessage(t, ws, winner)
+		time.Sleep(tenMs)
+		assertGameStartWith(t, game, 3)
+		assertGameFinish(t, game, winner)
+		within(t, tenMs, func() { assertWebsocketGotMsg(t, ws, wantBlindAlerter) })
+	})
+}
+
 func TestStoreWins(t *testing.T) {
 	store := StubPlayerStore{
 		map[string]int{},
@@ -55,7 +93,7 @@ func TestStoreWins(t *testing.T) {
 		nil,
 	}
 
-	server := NewPlayerServer(&store)
+	server, _ := NewPlayerServer(&store, dummyGame)
 	t.Run("it returns accepted on POST", func(t *testing.T) {
 		player := "stevie"
 		request := newPostScoreRequest(player)
@@ -81,7 +119,7 @@ func TestLeague(t *testing.T) {
 			{"stevie", 23},
 		}
 		store := StubPlayerStore{nil, nil, wantedLeague}
-		server := NewPlayerServer(&store)
+		server, _ := NewPlayerServer(&store, dummyGame)
 
 		request := newLeagueRequest()
 		response := httptest.NewRecorder()
@@ -117,4 +155,61 @@ func getLeagueResponse(t testing.TB, body io.Reader) (league []Player) {
 		t.Fatalf("Unable to parse response from server %q into slice of Player, %v", body, err)
 	}
 	return league
+}
+
+func mustMakePlayerServer(t *testing.T, store PlayerStore, game Game) *PlayerServer {
+	server, err := NewPlayerServer(store, game)
+	if err != nil {
+		t.Fatal("problem creating player server", err)
+	}
+
+	return server
+}
+
+func mustDialWs(t *testing.T, url string) *websocket.Conn {
+	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatalf("could not open a ws connection on %s %v", url, err)
+	}
+	return ws
+}
+
+func writeWsMessage(t *testing.T, ws *websocket.Conn, winner string) {
+	if err := ws.WriteMessage(websocket.TextMessage, []byte(winner)); err != nil {
+		t.Fatalf("could not send msg through over ws connection, %v", err)
+	}
+}
+
+func retryUntil(d time.Duration, f func() bool) bool {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if f() {
+			return true
+		}
+	}
+	return false
+}
+
+func within(t testing.TB, d time.Duration, assert func()) {
+	t.Helper()
+
+	done := make(chan struct{}, 1)
+
+	go func() {
+		assert()
+		done <- struct{}{}
+	}()
+
+	select {
+	case <-time.After(d):
+		t.Errorf("timed out")
+	case <-done:
+	}
+}
+
+func assertWebsocketGotMsg(t *testing.T, ws *websocket.Conn, want string) {
+	_, msg, _ := ws.ReadMessage()
+	if string(msg) != want {
+		t.Errorf(`got "%s", want "%s"`, string(msg), want)
+	}
 }

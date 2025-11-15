@@ -17,8 +17,10 @@ func main() {
 	}
 	defer closeFunc()
 
-	server := httpserver.NewPlayerServer(store)
-	if err := http.ListenAndServe(":5000", server); err != nil {
+	game := httpserver.NewGame(httpserver.BlindAlerterFunc(httpserver.Alerter), store)
+	server, err := httpserver.NewPlayerServer(store, game)
+	if err != nil {
 		log.Fatalf("could not listen on port 5000 %v", err)
 	}
+	log.Fatal(http.ListenAndServe(":5000", server))
 }

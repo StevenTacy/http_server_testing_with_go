@@ -15,7 +15,8 @@ func TestRecordingWinsAndResult(t *testing.T) {
 	if err != nil {
 		log.Fatalf("problem creating system player store %v", err)
 	}
-	server := NewPlayerServer(store)
+	game := &GameSpy{}
+	server, _ := NewPlayerServer(store, game)
 
 	player := "stevie"
 

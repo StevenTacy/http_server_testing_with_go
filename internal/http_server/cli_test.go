@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 var dummySpyAlerter = &SpyBlindAlerter{}
@@ -62,12 +63,12 @@ func TestCli(t *testing.T) {
 		cli := NewCLI(in, stdout, game)
 		cli.PlayPoker()
 
-		if game.StartCalled {
+		if game.StartedCalled {
 			t.Errorf("game should not have started")
 		}
 
 		gotPrompt := stdout.String()
-		wantPrompt := PlayerPrompt + "ur so silly"
+		wantPrompt := PlayerPrompt + BadPlayerInputPrompt
 		if gotPrompt != wantPrompt {
 			t.Errorf("got %q, want %q", gotPrompt, wantPrompt)
 		}
@@ -88,5 +89,26 @@ func assertScheduledAlert(t testing.TB, got, want scheduleAlert) {
 	gotTime := got.at
 	if gotTime != want.at {
 		t.Errorf("got amount %v, want %v", gotTime, want.at)
+	}
+}
+
+func assertGameStartWith(t testing.TB, game *GameSpy, want int) {
+	t.Helper()
+	passed := retryUntil(500*time.Millisecond, func() bool {
+		return game.StartedWith == want
+	})
+
+	if !passed {
+		t.Errorf("invalid winner got %d, but want %d", game.StartedWith, want)
+	}
+}
+
+func assertGameFinish(t testing.TB, game *GameSpy, winner string) {
+	t.Helper()
+	passed := retryUntil(500*time.Millisecond, func() bool {
+		return game.FinishedWith == winner
+	})
+	if !passed {
+		t.Errorf("invalid winner got %s, but want %s", game.FinishedWith, winner)
 	}
 }

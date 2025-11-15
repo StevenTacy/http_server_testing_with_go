@@ -10,6 +10,7 @@ import (
 )
 
 const PlayerPrompt = "Please enter the number of players: "
+const BadPlayerInputPrompt = "ur so silly"
 
 type CLI struct {
 	in   *bufio.Scanner
@@ -34,7 +35,7 @@ func (c *CLI) PlayPoker() {
 		fmt.Fprint(c.out, "ur so silly")
 		return
 	}
-	c.game.Start(numberOfPlayers)
+	c.game.Start(numberOfPlayers, c.out)
 	userInput := c.readLine()
 	winner := extractWinner(userInput)
 	c.game.Finish(winner)
@@ -61,6 +62,6 @@ func (s scheduleAlert) String() string {
 	return fmt.Sprintf("%d chips at %v", s.amount, s.at)
 }
 
-func (s *SpyBlindAlerter) ScheduleAlertAt(duration time.Duration, amount int) {
+func (s *SpyBlindAlerter) ScheduleAlertAt(duration time.Duration, amount int, to io.Writer) {
 	s.alerts = append(s.alerts, scheduleAlert{duration, amount})
 }

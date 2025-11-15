@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
+	"text/template"
+
+	"github.com/gorilla/websocket"
 )
 
 type PlayerStore interface {
@@ -16,6 +20,8 @@ type PlayerStore interface {
 type PlayerServer struct {
 	Store PlayerStore
 	http.Handler
+	template *template.Template
+	game     Game
 }
 
 type InMemoryPlayerStore struct {
@@ -27,16 +33,33 @@ type Player struct {
 	Wins int
 }
 
-func NewPlayerServer(store PlayerStore) *PlayerServer {
+const htmpPath = "game.html"
+
+func NewPlayerServer(store PlayerStore, game Game) (*PlayerServer, error) {
 	p := new(PlayerServer)
+	temp, err := template.ParseFiles(htmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("problem parsing game.html %s, %v", htmpPath, err)
+	}
 	p.Store = store
+	p.template = temp
+	p.game = game
 
 	router := http.NewServeMux()
 	router.Handle("/league", http.HandlerFunc(p.leagueHandler))
 	router.Handle("/players/", http.HandlerFunc(p.playersHandler))
-
+	router.Handle("/game", http.HandlerFunc(p.playGame))
+	router.Handle("/ws", http.HandlerFunc(p.webSocket))
 	p.Handler = router
-	return p
+	return p, nil
+}
+
+func (p *PlayerServer) playGame(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFiles("game.html")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("problem loading template %v", err), http.StatusInternalServerError)
+	}
+	tmpl.Execute(w, nil)
 }
 
 func (i *InMemoryPlayerStore) GetPlayerScore(name string) int {
@@ -96,4 +119,24 @@ func (p *PlayerServer) showScore(w http.ResponseWriter, player string) {
 	}
 
 	fmt.Fprint(w, score)
+}
+
+func newGameRequest() *http.Request {
+	request, _ := http.NewRequest(http.MethodGet, "/game", nil)
+	return request
+}
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+func (p *PlayerServer) webSocket(w http.ResponseWriter, r *http.Request) {
+	ws := newPlayerServerWS(w, r)
+	numberOfPlayersMsg := ws.WaitForMsg()
+	numberOfPlayers, _ := strconv.Atoi(string(numberOfPlayersMsg))
+	p.game.Start(numberOfPlayers, ws)
+
+	_, winnerMsg, _ := ws.ReadMessage()
+	p.game.Finish(string(winnerMsg))
 }

@@ -3,6 +3,8 @@ package httpserver
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -20,7 +22,7 @@ func TestStart(t *testing.T) {
 	t.Run("it schedules printing of blind values", func(t *testing.T) {
 		blindAlerter := &SpyBlindAlerter{}
 		game := NewGame(blindAlerter, dummyPlayerStore)
-		game.Start(5)
+		game.Start(5, io.Discard)
 		cases := []scheduleAlert{
 			{0 * time.Second, 100},
 			{10 * time.Minute, 200},
@@ -42,18 +44,14 @@ func TestStart(t *testing.T) {
 		game := NewGame(dummySpyAlerter, dummyPlayerStore)
 		cli := NewCLI(dummyStdIn, stdOut, game)
 		cli.PlayPoker()
-		got := stdOut.String()
-		want := PlayerPrompt
 
-		if got != want {
-			t.Errorf("got %q, want %q", got, want)
-		}
+		assertSentMsgToUser(t, stdOut, PlayerPrompt+BadPlayerInputPrompt)
 	})
 
 	t.Run("it prompts the user to enter the number of players", func(t *testing.T) {
 		blindAlerter := &SpyBlindAlerter{}
 		game := NewGame(blindAlerter, dummyPlayerStore)
-		game.Start(7)
+		game.Start(7, io.Discard)
 
 		cases := []scheduleAlert{
 			{0 * time.Second, 100},
@@ -75,5 +73,14 @@ func checkSchedulingCases(cases []scheduleAlert, t *testing.T, alerter *SpyBlind
 			got := alerter.alerts[i]
 			assertScheduledAlert(t, got, want)
 		})
+	}
+}
+
+func assertSentMsgToUser(t testing.TB, stdOut *bytes.Buffer, msg ...string) {
+	t.Helper()
+	got := stdOut.String()
+	want := strings.Join(msg, "")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
